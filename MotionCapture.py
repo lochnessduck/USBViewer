@@ -30,7 +30,8 @@ def get_difference_image_squares(im):
     diffSquare = im.slice(coordinate[0], coordinate[1])
     if diffSquare.size.x == 0:
         return []
-    return [diffSquare]  # put the difference square in a list. Next time you should expect to be giving multiple squares of difference
+    return [diffSquare]  # put the difference square in a list. Next time you
+                    #should expect to be giving multiple squares of difference
 
 def remove_covered_images():
     canvas = []  # this is the canvas
@@ -39,5 +40,6 @@ def remove_covered_images():
         imagesAndOrder.append((image.order, image))
     imagesAndOrder.sort()  # sort in order of images in front??
     images = [image for order, image in imagesAndOrder]  # separate only images
-    
+    for im in images:
+        
     
