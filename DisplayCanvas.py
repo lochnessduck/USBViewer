@@ -1,7 +1,8 @@
 import pygame
 import math
 from math import pi
-from PIL import Image
+from PIL import Image, ImageGrab
+import numpy as np
 
 
 class Display:
@@ -14,14 +15,19 @@ class Display:
         # Used to manage how fast the screen updates
         self.clock = pygame.time.Clock()        
         self.exit = False
+        self.size = size
+        self._dirtyboxOutdated = False
+        self._create_dirtybox()  # a matrix which determines invisible images
         
-    def __append__(self, image):
+    def append(self, image):
         """ requires a display image, which includes coordinates of where to
             display image
         """
-        if not type(image) == type(DisplayImage()):
-            raise UserWarning('incompatible image. Needs to be DisplayImage')
+        #if not type(image) == type(DisplayImage()):
+        #    raise UserWarning('incompatible image. Needs to be DisplayImage')
         self.images.append(image)
+        self._update_dirtybox()
+        self._remove_invisible_images()
         # delete any invisible sprites (which I havne't done yet)
         
         
@@ -55,11 +61,59 @@ class Display:
             pygame.quit()
         return not self.exit
         
+    def quit(self):
+        self.exit = True
+        pygame.quit()
         
+    def __iter__(self):
+        for dim in self.images:
+            yield dim
+            
+    def __getitem__(self, index):
+        return self.images[index]
+    
+    def __setitem__(self, index, im):
+        self._dirtyboxOutdated = True
+        self.images[index] = im
+        
+    def __nonzero__(self):
+        return len(self.images)
+        
+    def __contains__(self, im):
+        return im in self.images
+    
+    def __delitem__(self, index):
+        self._dirtyboxOutdated = True
+        del self.images[index]
+
+    def __len__(self):
+        return len(self.images)
+
+    def _create_dirtybox(self):
+        self._dirtybox = np.zeros(self.size) - 1
+        for i in range(len(self)):
+            bbox = self[i].bbox
+            self._dirtybox[bbox[0]:bbox[2], bbox[1]:bbox[3]] = i
+        self._dirtyboxOutdated = False
+
+    def _update_dirtybox(self):
+        """ call after adding an image to the canvas
+        """
+        i = len(self) - 1
+        bbox = self[i].bbox
+        self._dirtybox[bbox[0]:bbox[2], bbox[1]:bbox[3]] = i
+
+    def _remove_invisible_images(self):
+        if self._dirtyboxOutdated:
+            self._create_dirtybox()
+        for i in range(len(self) - 1, -1, -1):
+            if i not in self._dirtybox:
+                del self[i]  # if image is NOT visible, delete the image
+                
         
 class DisplayImage(pygame.sprite.Sprite):
     
-    def __init__(self, im, coordinates=(0,0)):
+    def __init__(self, im, xy=(0,0)):
         pygame.sprite.Sprite.__init__(self)   # call parent. use Super()instead?
         self.id = 19  # eventually needs to create separate IDs
         imString = im.tostring("raw", "RGB")  # a PILLOW function, default encoder is "raw"
@@ -67,24 +121,38 @@ class DisplayImage(pygame.sprite.Sprite):
         #imString = im.convert("RGBA").tostring(...)  # this works as well. maybe more robust
         self.size = im.size
         self.image = pygame.image.fromstring(imString, self.size, "RGB")
-        self.coordinates = coordinates
+        self.xy = xy
+        self.bbox = (xy[0], xy[1], xy[0] + self.size[0], xy[1] + self.size[1])
         self.rect = self.image.get_rect()
-        self.rect.x, self.rect.y = coordinates
+        self.rect.x, self.rect.y = xy
         
     def draw(self, screen):
         screen.blit(self.image, self.rect)
     
-    
+    @classmethod
+    def fromScreenshot(cls, bbox):  # bbox coordinates are top-left to bottom-right
+        im = ImageGrab.grab(bbox)
+        return cls(im, bbox[:2])
+        #return cls(im, bbox[:2])
 
 
  
 if __name__ == '__main__':
     size = (700, 400)
     display = Display(size)
-    im = Image.open('C:\\Users\\PC\\Downloads\\asdf.png')
+    #im = Image.open('asdf.png')
+    imString = '\x00\x00\x00\x00\x00\x00f\xb6\xff\xff\xff\xff\xff\xff\xb6\xff\xff\xff\xff\xdb\x90:\x00:\x90\xdb\xff\xff\xff\xff\xff\xff\xff\xff\xff\xdb\x90:\x00f\xb6\xff\xff\xff\xff\xff\xff\xff\xff\xb6f\x00\x00:\x90\xdb\xff\xff\xff\xff'
+    im = Image.fromstring('RGB',(5,4), imString) 
     dim = DisplayImage(im, (0,0))
-    dim2 = DisplayImage(im, (20, 40))
-    display.images.append(dim)
-    display.images.append(dim2)
+    dim2 = DisplayImage(im, (20, 20))
+    display.append(dim)
+    display.append(dim2)
+    del display[0] # remove first image added
+    for x in range(15, 30, 3):
+        for y in range(15, 30, 3):
+            dim = DisplayImage(im, (x, y))
+            display.append(dim)
+    print(len(display))  # should print 25, because we the 2nd image manually
+                        # added will be auto-removed once it's invisible
     while display.tick():
         pass  # when display.tick() returns false that means it has quit
