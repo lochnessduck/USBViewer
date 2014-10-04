@@ -91,17 +91,16 @@ class Display:
 
     def _create_dirtybox(self):
         self._dirtybox = np.zeros(self.size) - 1
-        for i in range(len(self)):
-            bbox = self[i].bbox
-            self._dirtybox[bbox[0]:bbox[2], bbox[1]:bbox[3]] = i
+        for i, im in enumerate(self):
+            self._dirtybox[im.xCoordinates, im.yCoordinates] = i
         self._dirtyboxOutdated = False
 
     def _update_dirtybox(self):
         """ call after adding an image to the canvas
         """
         i = len(self) - 1
-        bbox = self[i].bbox
-        self._dirtybox[bbox[0]:bbox[2], bbox[1]:bbox[3]] = i
+        im = self[i]
+        self._dirtybox[im.xCoordinates, im.yCoordinates] = i
 
     def _remove_invisible_images(self):
         if self._dirtyboxOutdated:
@@ -109,6 +108,7 @@ class Display:
         for i in range(len(self) - 1, -1, -1):
             if i not in self._dirtybox:
                 del self[i]  # if image is NOT visible, delete the image
+                # this also tells dirtybox that it's no longer valid.
                 
         
 class DisplayImage(pygame.sprite.Sprite):
@@ -125,6 +125,8 @@ class DisplayImage(pygame.sprite.Sprite):
         self.bbox = (xy[0], xy[1], xy[0] + self.size[0], xy[1] + self.size[1])
         self.rect = self.image.get_rect()
         self.rect.x, self.rect.y = xy
+        self.yCoordinates = slice(xy[1], xy[1] + self.size[1])  # get y coordinates that this image occupies
+        self.xCoordinates = slice(xy[0], xy[0] + self.size[0])  # get x coordinates that this image occupies
         
     def draw(self, screen):
         screen.blit(self.image, self.rect)
@@ -152,7 +154,7 @@ if __name__ == '__main__':
         for y in range(15, 30, 3):
             dim = DisplayImage(im, (x, y))
             display.append(dim)
-    print(len(display))  # should print 25, because we the 2nd image manually
+    print('should print 25:', len(display))  # should print 25, because we the 2nd image manually
                         # added will be auto-removed once it's invisible
     while display.tick():
         pass  # when display.tick() returns false that means it has quit
