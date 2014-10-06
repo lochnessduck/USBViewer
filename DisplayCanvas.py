@@ -23,13 +23,15 @@ class Display:
         """ requires a display image, which includes coordinates of where to
             display image
         """
-        #if not type(image) == type(DisplayImage()):
-        #    raise UserWarning('incompatible image. Needs to be DisplayImage')
         self.images.append(image)
         self._update_dirtybox()
         self._remove_invisible_images()
-        # delete any invisible sprites (which I havne't done yet)
-        
+    
+    def extend(self, images):
+        """ requires iterable of display images
+        """
+        for im in images:
+            self.append(im)
         
     def draw(self):
         #self.images.draw(self.screen)

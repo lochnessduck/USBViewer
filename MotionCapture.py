@@ -1,6 +1,6 @@
 import PIL
 from PIL import ImageChops, ImageGrab
-import DisplayCanvas
+from DisplayCanvas import DisplayImage
 import time
 import numpy as np
 
@@ -26,6 +26,11 @@ class ScreenMonitor:
         self.image = newIm
         return difIms
         
+    def total_refresh(self):
+        size = self.bbox[2:]
+        imArray = np.zeros(size) + 1
+        self.image = ImageGrab.grab(self.bbox)
+        return self.get_cropped_images_from_difference_array(imArray, self.image)
 
     #---------------- this will work
             #--------------------
@@ -86,10 +91,15 @@ class ScreenMonitor:
         #raise  # I get an error when trying to load image as an array of type int
         self.imArray = np.asarray(self.difBW, dtype='int32')
         #raise  # accessing the array (when loading as type 'bool') errors when accessing imArray[-1,-1] or [:,x]
-        bboxes = self.get_difference_image_bboxes(self.imArray)
+        return self.get_cropped_images_from_difference_array(self.imArray, imNew)
+        
+    def get_cropped_images_from_difference_array(self, imArray, imNew):
+        bboxes = self.get_difference_image_bboxes(imArray)
         imChunks = []
         for bbox in bboxes:
-            imChunk = imNew.crop(bbox)
+            xy = bbox[:2]
+            imCropped = imNew.crop(bbox)
+            imChunk = DisplayImage(imCropped, xy)
             imChunks.append(imChunk)
         return imChunks
 
