@@ -34,6 +34,7 @@ class ScreenMonitor:
         return [DisplayImage(imCropped, bbox.xy)]
 
     # right now this treats images as a numpy array. Maybe.. I can convert to a numpy array to make this bit easier?
+    # FOUND numpy array coordinates are accessed by [y, x], whereas images are accessed by [x, y]. Please keep that in mind.
     def create_square_from_image(self, im):
         # just hem in from all four sides, looking for the first instances of white
         for y in range(im.shape[0]):
