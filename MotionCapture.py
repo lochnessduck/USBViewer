@@ -4,6 +4,7 @@ from DisplayCanvas import DisplayImage, Display, BoundingBox
 import time
 import numpy as np
 import copy
+from timeit import timeit
 #import Debug
 
 
@@ -13,7 +14,8 @@ class ScreenMonitor:
         if not bbox:
             bbox = BoundingBox(0, 0, 1024, 768)  # supposed to be full screen size
         self.image = None  # first instance will not have anything displayed
-        self.bbox = bbox
+        self.bbox = bbox  # this bbox is for capturing image. Putting image
+          # onto display requires xy = (0,0)
 
     def get_screen_changes_as_display_images(self, totalRefresh=False):
         imOld = self.image
@@ -21,7 +23,7 @@ class ScreenMonitor:
         self.image = imNew  # the timing of where to set self.image is critical
           # if it's later than this, first-run will never reach past the if-statement
         if imOld is None or totalRefresh:  # which means it's the first time or a refresh is desired
-            return [DisplayImage(imNew, self.bbox)]
+            return [DisplayImage.from_image(imNew)]
         updateImages = self._get_update_images(imOld, imNew)
         return updateImages
 
@@ -35,7 +37,7 @@ class ScreenMonitor:
         return imChunks
     
     def _crop_image_to_bbox(self, im, bbox):
-        dimNew = DisplayImage(im, self.bbox)
+        dimNew = DisplayImage.from_image(im)  # image here will start at 0
         return dimNew.crop(bbox)
     
     def _split_image_into_chunks(self, im, limit=50):
@@ -56,6 +58,9 @@ class ScreenMonitor:
         grayscale = imdif.convert('L')  # convert color to grayscale.
         grayscale.load()
         array = np.asarray(grayscale, dtype='int32')  # numpy array
+        if not sum(sum(array)):
+            print('no difference in images!', sum(sum(array)))
+            return BoundingBox(0, 0, 0, 0)
         # just hem in from all four sides, looking for the first positive values
         for y in range(array.shape[0]):
             topSlice = array[y, :]
@@ -95,13 +100,10 @@ class DisplayUpdater:
 
 
 if __name__ == '__main__':
-    bbox = BoundingBox(0, 0, 300, 600)
+    bbox = BoundingBox.using_size((0, 0), (600, 600))
     display = Display(bbox.size)
     monitor = ScreenMonitor(bbox)
     updater = DisplayUpdater(display, monitor)
     while display.tick():
-        time.sleep(1)
         updater.update()
-    
-    
-    
+

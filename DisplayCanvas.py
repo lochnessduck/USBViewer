@@ -33,7 +33,9 @@ class Display:
     def draw(self):
         for dImage in self.surfaces:  #displayImage
             dImage.draw(self.screen)
+        self.surfaces = []  # erase all surfaces. Don't need them anymore
         pygame.display.flip()
+        
         
     def tick(self):
         """ called to update the display screen. Should be called as often as
@@ -87,26 +89,29 @@ class Display:
         
 class DisplayImage(pygame.sprite.Sprite):
     
-    def __init__(self, im, bbox=None):
+    def __init__(self):
         pygame.sprite.Sprite.__init__(self)   # call parent. use Super()instead?
         self.id = 19  # eventually needs to create separate IDs
-        imString = im.tostring("raw", "RGB")  # a PILLOW function, default encoder is "raw"
+        
+    @classmethod
+    def from_image(cls, im, bbox=None):
         if not bbox:
-            bbox = BoundingBox.using_size(xy, im.size)
-        self.surface = pygame.image.fromstring(imString, bbox.size, "RGB")
-        self.surface.convert()  # loads / converts image for much faster operation
-        self.bbox = bbox
-        self.size = im.size
+            bbox = BoundingBox.using_size((0,0), im.size)
+        return cls.from_string(im.tostring("raw", "RGB"), bbox)
         
     @classmethod
     def from_string(cls, imString, bbox):
-        im = pygame.image.fromstring(imString, bbox.size, "RGB")
-        return cls(im, bbox)
+        dim = cls()
+        dim.surface = pygame.image.fromstring(imString, bbox.size, "RGB")
+        dim.surface.convert()  # loads / converts image for much faster operation
+        dim.bbox = bbox
+        dim.size = bbox.size        
+        return dim
     
     @classmethod
     def fromScreenshot(cls, bbox):  # bbox points are left-top, right-bottom
         im = ImageGrab.grab(bbox)
-        return cls(im, bbox)
+        return cls.from_image(im, bbox)
 
     def draw(self, screen):
         screen.blit(self.surface, self.bbox.rect)
@@ -115,19 +120,16 @@ class DisplayImage(pygame.sprite.Sprite):
         """ crop always assumes that surface starts at (0,0)
             it does NOT take into account it's own bbox. 
             But after cropping, the bbox will be calculated
-            relative to its original bbox.
+            relative to instance's original bbox.
         """
-        surfaceCroppedChild = self.surface.subsurface(bbox.rect)  # still relates to parent!
-        surfaceCropped = surfaceCroppedChild.copy()  # copy will give us an independent surface
-        other = self.copy()
+        surfaceCropped = pygame.Surface(bbox.size)
+        surfaceCropped.blit(self.surface, (0,0), bbox.rect)
+        other = DisplayImage()
         other.surface = surfaceCropped
         other.bbox = self.bbox.crop(bbox)
         other.size = bbox.size
         return other
-        
-    def copy(self):
-        return copy.deepcopy(self)
-        
+         
         
 class BoundingBox:
 
@@ -176,7 +178,7 @@ if __name__ == '__main__':
     for x in range(150, 300, 30):
         for y in range(150, 300, 30):
             bbox = BoundingBox.using_size((x, y), (width, height))
-            dim = DisplayImage(im, bbox)
+            dim = DisplayImage.from_image(im, bbox)
             display.append(dim)
     while display.tick():
         pass  # when display.tick() returns false that means it has quit
