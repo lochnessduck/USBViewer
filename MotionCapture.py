@@ -3,60 +3,80 @@ from PIL import ImageChops, ImageGrab
 from DisplayCanvas import DisplayImage, Display, BoundingBox
 import time
 import numpy as np
-import Debug
+import copy
+#import Debug
+
 
 class ScreenMonitor:
 
     def __init__(self, bbox=None):
         if not bbox:
             bbox = BoundingBox(0, 0, 1024, 768)  # supposed to be full screen size
-        self.image = None  # ImageGrab.grab(bbox)  first instance will not have anything displayed
+        self.image = None  # first instance will not have anything displayed
         self.bbox = bbox
 
-    def get_changes_as_display_images(self, totalRefresh=False):
-        newIm = ImageGrab.grab(self.bbox)
-        if self.image is None or totalRefresh:  # which means it's the first time or a refresh is desired
-            self.image = newIm
-            return [DisplayImage(self.image, self.bbox.xy)]
-        difImages = self.get_cropped_images_update(self.image, newIm)
-        self.image = newIm
-        return difImages
+    def get_screen_changes_as_display_images(self, totalRefresh=False):
+        imOld = self.image
+        imNew = ImageGrab.grab(self.bbox)
+        self.image = imNew  # the timing of where to set self.image is critical
+          # if it's later than this, first-run will never reach past the if-statement
+        if imOld is None or totalRefresh:  # which means it's the first time or a refresh is desired
+            return [DisplayImage(imNew, self.bbox)]
+        updateImages = self._get_update_images(imOld, imNew)
+        return updateImages
 
-    def get_cropped_images_update(self, imOld, imNew):
+    def _get_update_images(self, imOld, imNew):
+        bbox = self._get_bounding_box_for_differences_between_images(imOld, imNew)
+        if bbox is None or bbox.size == (0,0):
+            imChunks = []
+        else:
+            imCropped = self._crop_image_to_bbox(imNew, bbox)
+            imChunks = self._split_image_into_chunks(imCropped)
+        return imChunks
+    
+    def _crop_image_to_bbox(self, im, bbox):
+        dimNew = DisplayImage(im, self.bbox)
+        return dimNew.crop(bbox)
+    
+    def _split_image_into_chunks(self, im, limit=50):
+        images = []
+        width, height = im.size
+        for x in range(0, width, limit):
+            for y in range(0, height, limit):
+                cropWidth = min(width - x, limit)
+                cropHeight = min(height - y, limit)
+                bbox = BoundingBox.using_size((x, y), (cropWidth, cropHeight))
+                imCropped = im.crop(bbox)
+                images.append(imCropped)
+        return images
+
+    # numpy arrays: [y,x]... images: [x,y]... Please keep that in mind.
+    def _get_bounding_box_for_differences_between_images(self, imOld, imNew):
         imdif = ImageChops.difference(imOld, imNew)
-        difBW = imdif.convert('L')
-        difBW.load()
-        imArray = np.asarray(difBW, dtype='int32')
-        bbox = self.create_square_from_image(imArray)
-        if bbox is None or bbox.size == (0,0):  # if bbox is None or box has no size
-            return []
-        imCropped = imNew.crop(bbox)
-        return [DisplayImage(imCropped, bbox.xy)]
-
-    # right now this treats images as a numpy array. Maybe.. I can convert to a numpy array to make this bit easier?
-    # FOUND numpy array coordinates are accessed by [y, x], whereas images are accessed by [x, y]. Please keep that in mind.
-    def create_square_from_image(self, im):
-        # just hem in from all four sides, looking for the first instances of white
-        for y in range(im.shape[0]):
-            topSlice = im[y, :]
+        grayscale = imdif.convert('L')  # convert color to grayscale.
+        grayscale.load()
+        array = np.asarray(grayscale, dtype='int32')  # numpy array
+        # just hem in from all four sides, looking for the first positive values
+        for y in range(array.shape[0]):
+            topSlice = array[y, :]
             if sum(topSlice):
                 break
         top = y
-        for y in range(im.shape[0] - 1, top - 1, -1):
-            bottomSlice = im[y, :]
+        for y in range(array.shape[0] - 1, top - 1, -1):
+            bottomSlice = array[y, :]
             if sum(bottomSlice):
-                y += 1  # if we found something, then that means the bounding box must be extended by one downward. So that the bounding box correctly shows the bottom part. Remember, this is where bottom -1 is included, but not bottom coordinate.
+                y += 1  # compensate for the outer edge of bbox
                 break
         bottom = y
-        for x in range(im.shape[1]):
-            leftSlice = im[:, x]
+        for x in range(array.shape[1]):
+            leftSlice = array[:, x]
             if sum(leftSlice):
                 break
         left = x
-        for x in range(im.shape[1] - 1, left - 1, -1):
-            rightSlice = im[:, x]
+        for x in range(array.shape[1] - 1, left - 1, -1):
+            rightSlice = array[:, x]
             if sum(rightSlice):
-                x += 1  # if we found something, then that means the bounding box to the right must extend by one (because x is not included in the image, x-1 IS)
+                x += 1  # compensate for outer edge of bbox
                 break
         right = x
         bbox = BoundingBox(left, top, right, bottom)
@@ -70,7 +90,7 @@ class DisplayUpdater:
         self.monitor = monitor
 
     def update(self):
-        dImages = self.monitor.get_changes_as_display_images()
+        dImages = self.monitor.get_screen_changes_as_display_images()
         self.display.extend(dImages)
 
 

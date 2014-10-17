@@ -3,6 +3,8 @@ import math
 from math import pi
 from PIL import Image, ImageGrab
 import numpy as np
+import copy
+import time
 
 
 class Display:
@@ -30,7 +32,7 @@ class Display:
         
     def draw(self):
         for dImage in self.surfaces:  #displayImage
-            dImage.draw(self.screen)            
+            dImage.draw(self.screen)
         pygame.display.flip()
         
     def tick(self):
@@ -85,28 +87,47 @@ class Display:
         
 class DisplayImage(pygame.sprite.Sprite):
     
-    def __init__(self, im, xy=(0,0)):
+    def __init__(self, im, bbox=None):
         pygame.sprite.Sprite.__init__(self)   # call parent. use Super()instead?
         self.id = 19  # eventually needs to create separate IDs
         imString = im.tostring("raw", "RGB")  # a PILLOW function, default encoder is "raw"
-        self.size = im.size
-        self.surface = pygame.image.fromstring(imString, self.size, "RGB")
+        if not bbox:
+            bbox = BoundingBox.using_size(xy, im.size)
+        self.surface = pygame.image.fromstring(imString, bbox.size, "RGB")
         self.surface.convert()  # loads / converts image for much faster operation
-        self.xy = xy
-        self.rect = pygame.Rect(xy, im.size)  # lots of useful function in pygame.Rect
+        self.bbox = bbox
+        self.size = im.size
         
     @classmethod
-    def from_string(cls, imString, imSize, xy=(0,0)):
-        im = pygame.image.fromstring(imString, imSize, "RGB")
-        return cls(im, xy)
+    def from_string(cls, imString, bbox):
+        im = pygame.image.fromstring(imString, bbox.size, "RGB")
+        return cls(im, bbox)
     
     @classmethod
-    def fromScreenshot(cls, bbox):  # bbox coordinates are top-left to bottom-right
+    def fromScreenshot(cls, bbox):  # bbox points are left-top, right-bottom
         im = ImageGrab.grab(bbox)
-        return cls(im, bbox[:2])
+        return cls(im, bbox)
 
     def draw(self, screen):
-        screen.blit(self.surface, self.rect)
+        screen.blit(self.surface, self.bbox.rect)
+        
+    def crop(self, bbox):  # must use a BoundingBox
+        """ crop always assumes that surface starts at (0,0)
+            it does NOT take into account it's own bbox. 
+            But after cropping, the bbox will be calculated
+            relative to its original bbox.
+        """
+        surfaceCroppedChild = self.surface.subsurface(bbox.rect)  # still relates to parent!
+        surfaceCropped = surfaceCroppedChild.copy()  # copy will give us an independent surface
+        other = self.copy()
+        other.surface = surfaceCropped
+        other.bbox = self.bbox.crop(bbox)
+        other.size = bbox.size
+        return other
+        
+    def copy(self):
+        return copy.deepcopy(self)
+        
         
 class BoundingBox:
 
@@ -121,7 +142,22 @@ class BoundingBox:
         self.height = self.h
         self.size = (self.w, self.h)
         self.xy = (left, top)
+        self.x = left
+        self.y = top
         self.rect = pygame.Rect(self.xy, self.size)
+        
+    @classmethod
+    def using_size(cls, xy, size):
+        x, y = xy
+        w, h = size
+        return cls(x, y, x + w, y + h)
+    
+    def crop(self, bbox):
+        """ assumes that crop operates on this instance starting at (0,0)
+        """
+        x, y = self.x + bbox.x, self.y + bbox.y
+        w, h = bbox.w, bbox.h
+        return BoundingBox.using_size((x, y), (w, h))
         
     def __iter__(self):
         for coordinate in [self.left, self.top, self.right, self.bottom]:
@@ -135,10 +171,12 @@ class BoundingBox:
 if __name__ == '__main__':
     size = (700, 400)
     display = Display(size)
-    im = ImageGrab.grab((0,0,50,40))
+    width, height = 50, 40
+    im = ImageGrab.grab(BoundingBox(0,0, width, height))
     for x in range(150, 300, 30):
         for y in range(150, 300, 30):
-            dim = DisplayImage(im, (x, y))
+            bbox = BoundingBox.using_size((x, y), (width, height))
+            dim = DisplayImage(im, bbox)
             display.append(dim)
     while display.tick():
         pass  # when display.tick() returns false that means it has quit
